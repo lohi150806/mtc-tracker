@@ -1,5 +1,5 @@
-import { BarChart3, Bus, Download, FileSpreadsheet, FileText, Landmark, Moon, RefreshCcw, Search, Sun } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { BarChart3, Bus, Download, FileSpreadsheet, FileText, Landmark, LockKeyhole, Moon, RefreshCcw, Search, ShieldCheck, Sun, User } from 'lucide-react';
+import type { FormEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Bar,
@@ -76,8 +76,92 @@ function StatusPill({ status }: { status: string }) {
   return <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${classes}`}>{status}</span>;
 }
 
+function LoginPage({ dark, onToggleDark, onLogin }: { dark: boolean; onToggleDark: () => void; onLogin: () => void }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const submitLogin = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (username.trim() === 'lohith' && password === 'admin') {
+      setError('');
+      onLogin();
+      return;
+    }
+
+    setError('Not authorized');
+  };
+
+  return (
+    <div className={dark ? 'dark' : ''}>
+      <main className="grid min-h-screen place-items-center bg-civic-mist px-4 py-8 text-civic-ink dark:bg-slate-950 dark:text-slate-100">
+        <button
+          aria-label="Toggle theme"
+          onClick={onToggleDark}
+          className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-md bg-white text-slate-700 shadow-panel dark:bg-slate-900 dark:text-slate-100"
+        >
+          {dark ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+
+        <section className="w-full max-w-md rounded-[2rem] border border-civic-line/80 bg-white p-7 shadow-panel dark:border-slate-700 dark:bg-slate-900 sm:p-8">
+          <div className="mb-7 text-center">
+            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-civic-blue text-white">
+              <ShieldCheck size={28} />
+            </div>
+            <h1 className="text-2xl font-bold">MTC Dashboard Login</h1>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Authorized access for transport performance analytics</p>
+          </div>
+
+          <form onSubmit={submitLogin} className="space-y-4">
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-slate-600 dark:text-slate-300">Username</span>
+              <span className="relative block">
+                <User className="absolute left-3 top-3 text-slate-400" size={18} />
+                <input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  className="w-full rounded-xl border border-civic-line bg-white py-3 pl-10 pr-3 text-sm outline-none transition focus:border-civic-blue focus:ring-2 focus:ring-civic-blue/20 dark:border-slate-700 dark:bg-slate-950"
+                  placeholder="Enter username"
+                  autoComplete="username"
+                />
+              </span>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-slate-600 dark:text-slate-300">Password</span>
+              <span className="relative block">
+                <LockKeyhole className="absolute left-3 top-3 text-slate-400" size={18} />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="w-full rounded-xl border border-civic-line bg-white py-3 pl-10 pr-3 text-sm outline-none transition focus:border-civic-blue focus:ring-2 focus:ring-civic-blue/20 dark:border-slate-700 dark:bg-slate-950"
+                  placeholder="Enter password"
+                  autoComplete="current-password"
+                />
+              </span>
+            </label>
+
+            {error && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200">
+                {error}
+              </div>
+            )}
+
+            <button type="submit" className="w-full rounded-xl bg-civic-blue px-4 py-3 text-sm font-bold text-white transition hover:bg-civic-blue/90">
+              Login
+            </button>
+          </form>
+        </section>
+      </main>
+    </div>
+  );
+}
+
 function App() {
   const [dark, setDark] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
   const [tab, setTab] = useState<'dashboard' | 'scheme' | 'reports'>('dashboard');
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [sort, setSort] = useState<{ key: keyof RouteAggregate; direction: 'asc' | 'desc' }>({ key: 'profit', direction: 'desc' });
@@ -132,6 +216,10 @@ function App() {
       direction: current.key === key && current.direction === 'desc' ? 'asc' : 'desc',
     }));
   };
+
+  if (!authenticated) {
+    return <LoginPage dark={dark} onToggleDark={() => setDark((value) => !value)} onLogin={() => setAuthenticated(true)} />;
+  }
 
   return (
     <div className={dark ? 'dark' : ''}>
