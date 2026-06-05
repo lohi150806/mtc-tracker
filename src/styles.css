@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  background: #eef3f7;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(31, 93, 122, 0.12), transparent 360px),
+    #eef3f7;
+}
+
+.dark body {
+  background:
+    linear-gradient(180deg, rgba(15, 118, 110, 0.18), transparent 360px),
+    #101820;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
