@@ -79,7 +79,18 @@ export interface SchemeFilters {
   month: string;
 }
 
-/** Schema for imported Excel route data */
+/** Financial input fields imported from Excel for each route */
+export interface RouteFinances {
+  dailyPassengers: number;
+  averageFare: number;
+  dailyFuelCost: number;
+  driverSalary: number;
+  conductorSalary: number;
+  maintenanceCost: number;
+  otherExpenses: number;
+}
+
+/** Schema for imported Excel route data — includes route info + financial input fields */
 export interface ImportedRoute {
   busNumber: string;
   routeName: string;
@@ -88,6 +99,15 @@ export interface ImportedRoute {
   stops: string[];
   distance: string;
   estimatedDuration: string;
+  finances: RouteFinances;
+}
+
+/** Computed financial results derived from RouteFinances */
+export interface RouteFinancialResult {
+  revenue: number;
+  totalCost: number;
+  profit: number;
+  passengers: number;
 }
 
 /** Result of parsing an Excel file */

@@ -68,10 +68,15 @@ export const monthlyTrend = (routes: RoutePerformance[], busType = 'Normal', dep
     (route) => route.busType === busType && (depot === 'All' || route.depot === depot) && (routeNumber === 'All' || route.routeNumber === routeNumber),
   );
 
-  return monthOrder.map((month) => {
+  // Collect all unique months present in the data, sorted by monthOrder
+  const presentMonths = monthOrder.filter((m) => scoped.some((route) => route.monthly.find((metric) => metric.month === m)));
+  const monthsToUse = presentMonths.length > 0 ? presentMonths : monthOrder;
+
+  return monthsToUse.map((month) => {
     return scoped.reduce(
       (row, route) => {
-        const entry = route.monthly.find((metric) => metric.month === month)!;
+        const entry = route.monthly.find((metric) => metric.month === month);
+        if (!entry) return row; // skip routes that don't have this month
         row.revenue += entry.revenue;
         row.cost += entry.cost;
         row.profit += entry.revenue - entry.cost;

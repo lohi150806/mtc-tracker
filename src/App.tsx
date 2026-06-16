@@ -22,6 +22,8 @@ import {
   YAxis,
 } from 'recharts';
 import { routes } from './data/routes';
+import { useImportedRoutes } from './context/ImportedRoutesContext';
+import { convertImportedRoutes } from './utils/routeConverter';
 import { govtSchemeUsage } from './data/govtScheme';
 import { BusType, Filters, RouteAggregate, SchemeFilters, SchemeUsageRecord } from './types';
 import {
@@ -57,6 +59,7 @@ import MapPage from './pages/MapPage';
 import ExecutiveView from './pages/Executive';
 import SettingsPage from './pages/Settings';
 import WelcomeBanner from './components/WelcomeBanner';
+import ImportedFinancialsPanel from './components/ImportedFinancialsPanel';
 
 const initialFilters: Filters = { depot: 'All', route: 'All', month: 'All', busType: 'Normal', search: '' };
 const initialSchemeFilters: SchemeFilters = { origin: 'All', destination: 'All', route: 'All', month: 'All' };
@@ -308,6 +311,11 @@ function DashboardShell() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [logoutNotice, setLogoutNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const { importedRoutes } = useImportedRoutes();
+  const activeRoutes = useMemo(
+    () => (importedRoutes.length > 0 ? convertImportedRoutes(importedRoutes) : routes),
+    [importedRoutes],
+  );
 
   const handleLogout = () => {
     setLogoutNotice({ type: 'success', message: 'Logged out successfully.' });
@@ -321,25 +329,25 @@ function DashboardShell() {
     }, 1200);
   };
 
-  const [tab, setTab] = useState<'dashboard' | 'scheme' | 'reports'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'scheme' | 'reports' | 'imported'>('dashboard');
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [sort, setSort] = useState<{ key: keyof RouteAggregate; direction: 'asc' | 'desc' }>({ key: 'profit', direction: 'desc' });
   const [page, setPage] = useState(1);
-  const [selectedRoute, setSelectedRoute] = useState(routes[0].routeNumber);
+  const [selectedRoute, setSelectedRoute] = useState(activeRoutes[0]?.routeNumber ?? '');
 
-  const scopedRoutes = useMemo(() => routes.filter((route) => route.busType === filters.busType), [filters.busType]);
+  const scopedRoutes = useMemo(() => activeRoutes.filter((route) => route.busType === filters.busType), [filters.busType, activeRoutes]);
   const depots = useMemo(() => ['All', ...Array.from(new Set(scopedRoutes.map((route) => route.depot))).sort()], [scopedRoutes]);
   const routeOptions = useMemo(
     () => ['All', ...scopedRoutes.filter((route) => filters.depot === 'All' || route.depot === filters.depot).map((route) => route.routeNumber)],
     [filters.depot, scopedRoutes],
   );
-  const filtered = useMemo(() => applyFilters(routes, filters), [filters]);
+  const filtered = useMemo(() => applyFilters(activeRoutes, filters), [filters, activeRoutes]);
   const totals = useMemo(() => totalsFor(filtered), [filtered]);
   const routeProfitability = useMemo(
     () => [...filtered].sort((a, b) => b.profit - a.profit).slice(0, 12).map((route) => ({ route: route.routeNumber, profit: route.profit })),
     [filtered],
   );
-  const trend = useMemo(() => monthlyTrend(routes, filters.busType, filters.depot, filters.route), [filters.busType, filters.depot, filters.route]);
+  const trend = useMemo(() => monthlyTrend(activeRoutes, filters.busType, filters.depot, filters.route), [filters.busType, filters.depot, filters.route, activeRoutes]);
   const [activeDepotIndex, setActiveDepotIndex] = useState<number | null>(null);
   const depotCodes: Record<string, string> = {
     Tambaram: 'TBM',
@@ -415,6 +423,28 @@ function DashboardShell() {
         </div>
 
         <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
+          {/* Tab navigation */}
+          <div className="mb-5 flex flex-wrap items-center gap-2 rounded-lg border border-[#1E293B] bg-[#0B1220] p-1 shadow-panel">
+            {([
+              { key: 'dashboard', label: 'Dashboard' },
+              { key: 'scheme', label: 'Govt Scheme' },
+              { key: 'reports', label: 'Reports' },
+              { key: 'imported', label: 'Imported Data' },
+            ] as const).map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
+                  tab === t.key
+                    ? 'bg-[#0EA5E9] text-[#0B1220]'
+                    : 'text-[#94A3B8] hover:bg-[#0F172A] hover:text-[#E2E8F0]'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
           {tab !== 'scheme' && (
             <section className="mb-5 grid gap-3 rounded-lg border border-[#1E293B] bg-[#0B1220] p-4 shadow-panel lg:grid-cols-[1fr_1fr_1fr_auto]">
               <select value={filters.depot} onChange={(event) => updateFilter('depot', event.target.value)} className="rounded-md border border-[#1E293B] bg-[#0F172A] px-3 py-2 text-sm text-[#E2E8F0] focus:border-[#0EA5E9] focus:ring-[#0EA5E9]/20">
@@ -432,7 +462,9 @@ function DashboardShell() {
             </section>
           )}
 
-          {tab === 'dashboard' ? (
+          {tab === 'imported' ? (
+            <ImportedFinancialsPanel />
+          ) : tab === 'dashboard' ? (
             <>
               <section className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
                 <MetricCard label="Total Revenue" value={compactCurrency(totals.revenue)} />

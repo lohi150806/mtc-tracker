@@ -1,5 +1,16 @@
 import * as XLSX from 'xlsx';
-import type { ImportedRoute, ImportResult } from '../types';
+import type { ImportedRoute, ImportResult, RouteFinances } from '../types';
+
+/** Default financial values when a column is missing from the Excel */
+const DEFAULT_FINANCES: RouteFinances = {
+  dailyPassengers: 1500,
+  averageFare: 12,
+  dailyFuelCost: 8500,
+  driverSalary: 22000,
+  conductorSalary: 18000,
+  maintenanceCost: 12000,
+  otherExpenses: 8000,
+};
 
 /**
  * Column name normalisation:
@@ -16,6 +27,7 @@ function normalizeKey(key: string): string {
  * are the internal field names.
  */
 const COLUMN_MAP: Record<string, string> = {
+  // Route info
   busnumber: 'busNumber',
   busnumber1: 'busNumber',
   busno: 'busNumber',
@@ -39,14 +51,43 @@ const COLUMN_MAP: Record<string, string> = {
   estimated: 'estimatedDuration',
   estduration: 'estimatedDuration',
   time: 'estimatedDuration',
+  // Financial fields
+  dailypassengers: 'dailyPassengers',
+  dailypassenger: 'dailyPassengers',
+  passengers: 'dailyPassengers',
+  avgfare: 'averageFare',
+  averagefare: 'averageFare',
+  fare: 'averageFare',
+  dailyfuelcost: 'dailyFuelCost',
+  fuelcost: 'dailyFuelCost',
+  fuel: 'dailyFuelCost',
+  driversalary: 'driverSalary',
+  salarydriver: 'driverSalary',
+  conductorsalary: 'conductorSalary',
+  salaryconductor: 'conductorSalary',
+  maintenancecost: 'maintenanceCost',
+  maintenance: 'maintenanceCost',
+  otherexpenses: 'otherExpenses',
+  otherexpense: 'otherExpenses',
+  expenses: 'otherExpenses',
+  other: 'otherExpenses',
 };
 
 /** Required fields that must be present and non-empty */
 const REQUIRED_FIELDS = ['busNumber', 'source', 'destination'];
 
+/** Parse a numeric value from a cell, returning 0 if unparseable */
+function parseNumber(val: unknown): number {
+  if (val == null) return 0;
+  if (typeof val === 'number') return val;
+  const cleaned = String(val).replace(/[₹,\s]/g, '');
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : 0;
+}
+
 /**
  * Read an Excel ArrayBuffer, parse the first worksheet, and return
- * validated ImportedRoute objects.
+ * validated ImportedRoute objects with computed financial fields.
  */
 export function parseExcel(buffer: ArrayBuffer, fileName: string): ImportResult {
   const workbook = XLSX.read(buffer, { type: 'array' });
@@ -77,7 +118,6 @@ export function parseExcel(buffer: ArrayBuffer, fileName: string): ImportResult 
   // Verify at least the required fields are mapped
   for (const field of REQUIRED_FIELDS) {
     if (!fieldToColumn[field]) {
-      // Try a second pass — search for partial matches if no exact match
       for (const col of headerKeys) {
         const norm = normalizeKey(col);
         if (
@@ -114,6 +154,12 @@ export function parseExcel(buffer: ArrayBuffer, fileName: string): ImportResult 
       return String(val).trim();
     };
 
+    const getNum = (field: string): number => {
+      const col = fieldToColumn[field];
+      if (!col) return 0;
+      return parseNumber(raw[col]);
+    };
+
     const busNumber = getField('busNumber');
     const routeName = getField('routeName');
     const source = getField('source');
@@ -142,6 +188,25 @@ export function parseExcel(buffer: ArrayBuffer, fileName: string): ImportResult 
           .filter(Boolean)
       : [source, destination]; // fallback when no stops provided
 
+    // Parse financial fields with mock defaults when not provided
+    const dailyPassengers = getNum('dailyPassengers') || DEFAULT_FINANCES.dailyPassengers;
+    const averageFare = getNum('averageFare') || DEFAULT_FINANCES.averageFare;
+    const dailyFuelCost = getNum('dailyFuelCost') || DEFAULT_FINANCES.dailyFuelCost;
+    const driverSalary = getNum('driverSalary') || DEFAULT_FINANCES.driverSalary;
+    const conductorSalary = getNum('conductorSalary') || DEFAULT_FINANCES.conductorSalary;
+    const maintenanceCost = getNum('maintenanceCost') || DEFAULT_FINANCES.maintenanceCost;
+    const otherExpenses = getNum('otherExpenses') || DEFAULT_FINANCES.otherExpenses;
+
+    const finances: RouteFinances = {
+      dailyPassengers,
+      averageFare,
+      dailyFuelCost,
+      driverSalary,
+      conductorSalary,
+      maintenanceCost,
+      otherExpenses,
+    };
+
     // Check for duplicate bus number — update in-place
     const existingIndex = routes.findIndex((r) => r.busNumber.toUpperCase() === busNumber.toUpperCase());
     const route: ImportedRoute = {
@@ -152,6 +217,7 @@ export function parseExcel(buffer: ArrayBuffer, fileName: string): ImportResult 
       stops,
       distance: distance || '-',
       estimatedDuration: estimatedDuration || '-',
+      finances,
     };
 
     if (existingIndex >= 0) {
@@ -178,6 +244,13 @@ const TEMPLATE_ROWS = [
     Stops: 'Broadway, Central, Guindy, Tambaram',
     Distance: '32 km',
     'Estimated Duration': '1 hr 15 min',
+    'Daily Passengers': '1500',
+    'Average Fare': '12',
+    'Daily Fuel Cost': '8500',
+    'Driver Salary': '22000',
+    'Conductor Salary': '18000',
+    'Maintenance Cost': '12000',
+    'Other Expenses': '8000',
   },
   {
     'Bus Number': '',
@@ -187,6 +260,13 @@ const TEMPLATE_ROWS = [
     Stops: '',
     Distance: '',
     'Estimated Duration': '',
+    'Daily Passengers': '',
+    'Average Fare': '',
+    'Daily Fuel Cost': '',
+    'Driver Salary': '',
+    'Conductor Salary': '',
+    'Maintenance Cost': '',
+    'Other Expenses': '',
   },
 ];
 
@@ -194,15 +274,21 @@ export function downloadTemplate(): void {
   const ws = XLSX.utils.json_to_sheet(TEMPLATE_ROWS);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Routes');
-  // Set column widths
   ws['!cols'] = [
     { wch: 14 }, // Bus Number
     { wch: 28 }, // Route Name
     { wch: 18 }, // Source
     { wch: 18 }, // Destination
-    { wch: 40 }, // Stops
+    { wch: 50 }, // Stops
     { wch: 12 }, // Distance
     { wch: 20 }, // Estimated Duration
+    { wch: 18 }, // Daily Passengers
+    { wch: 14 }, // Average Fare
+    { wch: 16 }, // Daily Fuel Cost
+    { wch: 14 }, // Driver Salary
+    { wch: 18 }, // Conductor Salary
+    { wch: 18 }, // Maintenance Cost
+    { wch: 16 }, // Other Expenses
   ];
   XLSX.writeFile(wb, 'MTC_Routes_Template.xlsx');
 }
@@ -220,19 +306,22 @@ export function exportRoutesAsExcel(routes: ImportedRoute[]): void {
     Stops: r.stops.join(', '),
     Distance: r.distance,
     'Estimated Duration': r.estimatedDuration,
+    'Daily Passengers': String(r.finances.dailyPassengers),
+    'Average Fare': String(r.finances.averageFare),
+    'Daily Fuel Cost': String(r.finances.dailyFuelCost),
+    'Driver Salary': String(r.finances.driverSalary),
+    'Conductor Salary': String(r.finances.conductorSalary),
+    'Maintenance Cost': String(r.finances.maintenanceCost),
+    'Other Expenses': String(r.finances.otherExpenses),
   }));
 
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Routes');
   ws['!cols'] = [
-    { wch: 14 },
-    { wch: 28 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 50 },
-    { wch: 12 },
-    { wch: 20 },
+    { wch: 14 }, { wch: 28 }, { wch: 18 }, { wch: 18 }, { wch: 50 },
+    { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 16 },
+    { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 16 },
   ];
   XLSX.writeFile(wb, `MTC_Routes_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
