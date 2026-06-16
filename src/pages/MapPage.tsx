@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -8,6 +8,8 @@ import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 import { useTheme } from '../context/ThemeContext';
 import { findBusRoute, type MockBusRoute } from '../data/mockBusRoutes';
+import { useImportedRoutes } from '../context/ImportedRoutesContext';
+import type { ImportedRoute } from '../types';
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
@@ -18,11 +20,26 @@ L.Icon.Default.mergeOptions({
 const CHENNAI_CENTER: [number, number] = [13.0827, 80.2707];
 const ROUTE_COLOR = '#0ea5e9';
 
+/** Convert a string or ImportedStop to a display name. */
+function stopName(stop: string | { name: string }): string {
+  return typeof stop === 'string' ? stop : stop.name;
+}
+
+/**
+ * A display-oriented route that can come from either mock data or imported data.
+ * When coordinates aren't available (imported data), we show a card-only view.
+ */
+type DisplayRoute = MockBusRoute | (ImportedRoute & { coordinates: [number, number][]; routeName: string; startPoint: string; endPoint: string });
+
+function hasCoords(route: DisplayRoute): route is MockBusRoute {
+  return route.coordinates.length > 0;
+}
+
 // Pans/zooms the map: fits the active route's bounds, or recenters on Chennai.
-function MapController({ route }: { route: MockBusRoute | null }) {
+function MapController({ route }: { route: DisplayRoute | null }) {
   const map = useMap();
   useEffect(() => {
-    if (route && route.coordinates.length > 0) {
+    if (route && hasCoords(route)) {
       map.fitBounds(route.coordinates, { padding: [48, 48], animate: true });
     } else {
       map.setView(CHENNAI_CENTER, 12, { animate: true });
@@ -31,7 +48,7 @@ function MapController({ route }: { route: MockBusRoute | null }) {
   return null;
 }
 
-function RouteInfoCard({ route }: { route: MockBusRoute }) {
+function RouteInfoCard({ route }: { route: DisplayRoute }) {
   return (
     <div className="rounded-lg border border-[#1E293B] bg-[#0F172A] p-4 shadow-panel">
       <div className="flex items-center gap-2">
@@ -68,14 +85,20 @@ function RouteInfoCard({ route }: { route: MockBusRoute }) {
         <div className="mt-2 flex flex-wrap gap-2">
           {route.stops.map((stop) => (
             <span
-              key={stop}
+              key={stopName(stop)}
               className="rounded-full border border-[#1E293B] bg-[#11203b] px-2.5 py-1 text-xs text-[#E2E8F0]"
             >
-              {stop}
+              {stopName(stop)}
             </span>
           ))}
         </div>
       </div>
+
+      {!hasCoords(route) && (
+        <div className="mt-3 rounded-md border border-amber-700/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-300">
+          No map coordinates available for this imported route. Route card details are shown below.
+        </div>
+      )}
     </div>
   );
 }
@@ -87,10 +110,29 @@ export default function MapPage() {
     ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
     : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 
+  const { importedRoutes, metadata } = useImportedRoutes();
+
   const [query, setQuery] = useState('');
-  const [selectedRoute, setSelectedRoute] = useState<MockBusRoute | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<DisplayRoute | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  /** Merge imported routes into a searchable index (Memoized). */
+  const importedIndex = useMemo(() => {
+    const index = new Map<string, DisplayRoute>();
+    for (const r of importedRoutes) {
+      index.set(r.busNumber.toUpperCase(), {
+        ...r,
+        routeName: `${r.source} → ${r.destination}`,
+        startPoint: r.source,
+        endPoint: r.destination,
+        coordinates: [],
+      });
+    }
+    return index;
+  }, [importedRoutes]);
+
+  const hasImport = importedRoutes.length > 0;
 
   const handleSearch = (event: FormEvent) => {
     event.preventDefault();
@@ -102,8 +144,22 @@ export default function MapPage() {
     }
 
     setLoading(true);
-    // Brief delay so the loading state is visible for the mock lookup.
+    // Brief delay so the loading state is visible for the lookup.
     setTimeout(() => {
+      const key = trimmed.toUpperCase();
+
+      // 1. Check imported routes first
+      if (hasImport) {
+        const imported = importedIndex.get(key);
+        if (imported) {
+          setSelectedRoute(imported);
+          setError(null);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 2. Fall back to mock data
       const match = findBusRoute(trimmed);
       if (match) {
         setSelectedRoute(match);
@@ -192,7 +248,7 @@ export default function MapPage() {
                     <Marker key={`${selectedRoute.busNumber}-${index}`} position={position}>
                       <Popup>
                         <div className="text-sm">
-                          <div className="font-semibold">{selectedRoute.stops[index] ?? 'Stop'}</div>
+                          <div className="font-semibold">{stopName(selectedRoute.stops[index] ?? 'Stop')}</div>
                           <div className="text-slate-600">
                             {selectedRoute.busNumber} · {selectedRoute.routeName}
                           </div>

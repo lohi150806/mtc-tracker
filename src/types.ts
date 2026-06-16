@@ -78,3 +78,31 @@ export interface SchemeFilters {
   route: string;
   month: string;
 }
+
+/** A single stop along an imported route */
+export interface ImportedStop {
+  name: string;
+  lat?: number;
+  lng?: number;
+}
+
+/** Schema expected from imported CSV / XLSX / JSON files */
+export interface ImportedRoute {
+  busNumber: string;
+  source: string;
+  destination: string;
+  stops: (string | ImportedStop)[];
+}
+
+/** Metadata tracked for each import operation */
+export interface ImportMetadata {
+  fileName: string;
+  timestamp: number;
+  totalRoutes: number;
+}
+
+/** Full state stored in localStorage */
+export interface ImportState {
+  routes: ImportedRoute[];
+  metadata: ImportMetadata | null;
+}

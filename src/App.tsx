@@ -46,6 +46,7 @@ import {
   topSchemeRoutes,
 } from './utils/schemeAnalytics';
 import { useTheme } from './context/ThemeContext';
+import { ImportedRoutesProvider } from './context/ImportedRoutesContext';
 import Sidebar from './components/Sidebar';
 import KPI from './components/KPI';
 import AIInsights from './components/AIInsights';
@@ -1047,7 +1048,9 @@ function App() {
 export default function AppWithAuth() {
   return (
     <AuthProvider>
-      <App />
+      <ImportedRoutesProvider>
+        <App />
+      </ImportedRoutesProvider>
     </AuthProvider>
   );
 }
