@@ -6,8 +6,6 @@ import {
   ShieldCheck,
   Menu,
   ChevronDown,
-  LogOut,
-  FileText,
   Settings,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -22,7 +20,6 @@ export default function Sidebar() {
     { to: '/dashboard', label: 'Dashboard', icon: <Home size={16} /> },
     { to: '/map', label: 'Route Map', icon: <MapPin size={16} /> },
     { to: '/scheme', label: 'Govt Scheme', icon: <ShieldCheck size={16} /> },
-    { to: '/reports', label: 'Reports', icon: <FileText size={16} /> },
     { to: '/settings', label: 'Settings', icon: <Settings size={16} /> },
   ];
 
@@ -98,14 +95,6 @@ export default function Sidebar() {
                 </Link>
               );
             })}
-
-            <button
-              className="flex items-center gap-3 rounded-xl px-3 py-2 text-red-400 hover:bg-red-500/10"
-            >
-              <LogOut size={16} />
-
-              {!collapsed && <span>Logout</span>}
-            </button>
           </nav>
         )}
 

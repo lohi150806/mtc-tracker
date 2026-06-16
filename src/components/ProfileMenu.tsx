@@ -19,9 +19,7 @@ export default function ProfileMenu({ name = 'Lohith', onLogout }: { name?: stri
 
       {open && (
         <div className="absolute right-0 mt-2 w-40 rounded-md bg-[#0B1220] p-2 shadow-md border border-[#1E293B]">
-          <button className="w-full text-left px-3 py-2 text-sm text-[#E2E8F0] hover:bg-[#11203b] rounded-md">Reports</button>
-          <button className="w-full text-left px-3 py-2 text-sm text-[#E2E8F0] hover:bg-[#11203b] rounded-md">Settings</button>
-          <button onClick={() => { onLogout?.(); }} className="w-full text-left px-3 py-2 text-sm text-[#E2E8F0] hover:bg-[#11203b] rounded-md">Logout</button>
+          <button onClick={() => { setOpen(false); onLogout?.(); }} className="w-full text-left px-3 py-2 text-sm text-[#E2E8F0] hover:bg-[#11203b] rounded-md">Logout</button>
         </div>
       )}
     </div>

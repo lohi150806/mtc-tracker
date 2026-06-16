@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, type User as FirebaseUser } from 'firebase/auth';
 import { auth } from './firebase';
-import { ArrowUpRight, BarChart3, Bus, Download, FileSpreadsheet, FileText, Landmark, LockKeyhole, Moon, RefreshCcw, Search, ShieldCheck, Sun, TrendingUp, User } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, BarChart3, Bus, Check, Download, FileSpreadsheet, FileText, Landmark, LockKeyhole, Moon, RefreshCcw, Search, ShieldCheck, Sun, TrendingUp, User } from 'lucide-react';
 import type { FormEvent, ReactNode } from 'react';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
@@ -166,6 +166,9 @@ function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await signOut(auth);
+    localStorage.clear();
+    sessionStorage.clear();
+    setUser(null);
   };
 
   return <AuthContext.Provider value={{ user, loading, login, logout }}>{children}</AuthContext.Provider>;
@@ -301,6 +304,21 @@ function LoginPage({ dark, onToggleDark, onLogin }: { dark: boolean; onToggleDar
 
 function DashboardShell({ dark, onToggleDark }: { dark: boolean; onToggleDark: () => void }) {
   const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [logoutNotice, setLogoutNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const handleLogout = () => {
+    setLogoutNotice({ type: 'success', message: 'Logged out successfully.' });
+    setTimeout(async () => {
+      try {
+        await logout();
+        navigate('/login', { replace: true });
+      } catch (error) {
+        setLogoutNotice({ type: 'error', message: 'Failed to log out. Please try again.' });
+      }
+    }, 1200);
+  };
+
   const [tab, setTab] = useState<'dashboard' | 'scheme' | 'reports'>('dashboard');
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [sort, setSort] = useState<{ key: keyof RouteAggregate; direction: 'asc' | 'desc' }>({ key: 'profit', direction: 'desc' });
@@ -375,7 +393,20 @@ function DashboardShell({ dark, onToggleDark }: { dark: boolean; onToggleDark: (
       <div className="flex">
         <Sidebar />
         <main className="flex-1 min-h-screen bg-[#0B1220] text-[#E2E8F0]">
-        <TopNav onLogout={logout} />
+        <TopNav onLogout={handleLogout} />
+
+        {logoutNotice && (
+          <div
+            className={`fixed right-4 top-4 z-50 flex items-center gap-3 rounded-lg border px-4 py-3 text-sm shadow-lg ${
+              logoutNotice.type === 'success'
+                ? 'border-emerald-900/60 bg-emerald-950/90 text-emerald-200'
+                : 'border-rose-900/60 bg-rose-950/90 text-rose-200'
+            }`}
+          >
+            {logoutNotice.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
+            {logoutNotice.message}
+          </div>
+        )}
 
         {/* Welcome banner */}
         <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
