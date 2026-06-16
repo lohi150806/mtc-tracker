@@ -1,184 +1,238 @@
-import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import type { ImportedRoute, ImportedStop } from '../types';
+import type { ImportedRoute, ImportResult } from '../types';
 
 /**
- * Validate that a parsed object conforms to the ImportedRoute schema.
- * Returns the validated route or a string describing what failed.
+ * Column name normalisation:
+ * - Lowercases
+ * - Removes all spaces and underscores
+ * - Returns the canonical key for lookup
  */
-function validateRoute(raw: Record<string, unknown>, index: number): { route: ImportedRoute } | { error: string } {
-  const busNumber = String(raw.busNumber ?? raw.BusNumber ?? raw['Bus Number'] ?? '').trim();
-  const source = String(raw.source ?? raw.Source ?? raw.origin ?? raw.Origin ?? '').trim();
-  const destination = String(raw.destination ?? raw.Destination ?? raw.dest ?? raw.Dest ?? '').trim();
-  const stopsRaw = raw.stops ?? raw.Stops ?? raw.routeStops ?? raw.RouteStops ?? '';
-
-  if (!busNumber) {
-    return { error: `Row ${index}: "busNumber" is required.` };
-  }
-  if (!source) {
-    return { error: `Row ${index}: "source" is required.` };
-  }
-  if (!destination) {
-    return { error: `Row ${index}: "destination" is required.` };
-  }
-
-  let stops: (string | ImportedStop)[] = [];
-
-  if (typeof stopsRaw === 'string') {
-    // Parse semicolon or comma-separated list
-    const separator = stopsRaw.includes(';') ? ';' : ',';
-    stops = stopsRaw
-      .split(separator)
-      .map((s: string) => s.trim())
-      .filter(Boolean);
-  } else if (Array.isArray(stopsRaw)) {
-    stops = stopsRaw.map((s: unknown) => {
-      if (typeof s === 'string') return s.trim();
-      if (s && typeof s === 'object') {
-        const obj = s as Record<string, unknown>;
-        return {
-          name: String(obj.name ?? ''),
-          lat: obj.lat != null ? Number(obj.lat) : undefined,
-          lng: obj.lng != null ? Number(obj.lng) : undefined,
-        } as ImportedStop;
-      }
-      return String(s);
-    }).filter((s) => (typeof s === 'string' ? s.length > 0 : (s as ImportedStop).name.length > 0));
-  }
-
-  if (stops.length === 0) {
-    return { error: `Row ${index}: "stops" must be a non-empty array or delimited string.` };
-  }
-
-  return {
-    route: { busNumber, source, destination, stops },
-  };
+function normalizeKey(key: string): string {
+  return key.replace(/[\s_]/g, '').toLowerCase();
 }
 
 /**
- * Parse a CSV string into an array of ImportedRoute objects.
+ * Flexible column mapping. The map's keys are normalised forms; the values
+ * are the internal field names.
  */
-export function parseCsv(text: string): ImportedRoute[] {
-  const result = Papa.parse<Record<string, unknown>>(text, {
-    header: true,
-    skipEmptyLines: true,
-    dynamicTyping: false,
-  });
+const COLUMN_MAP: Record<string, string> = {
+  busnumber: 'busNumber',
+  busnumber1: 'busNumber',
+  busno: 'busNumber',
+  routename: 'routeName',
+  routename1: 'routeName',
+  route: 'routeName',
+  source: 'source',
+  startpoint: 'source',
+  start: 'source',
+  origin: 'source',
+  destination: 'destination',
+  endpoint: 'destination',
+  end: 'destination',
+  dest: 'destination',
+  stops: 'stops',
+  stop: 'stops',
+  distance: 'distance',
+  dist: 'distance',
+  estimatedduration: 'estimatedDuration',
+  duration: 'estimatedDuration',
+  estimated: 'estimatedDuration',
+  estduration: 'estimatedDuration',
+  time: 'estimatedDuration',
+};
 
-  if (result.errors.length > 0) {
-    const firstError = result.errors[0];
-    throw new Error(`CSV parse error near row ${firstError.row ?? '?'}: ${firstError.message}`);
-  }
-
-  const routes: ImportedRoute[] = [];
-  const errors: string[] = [];
-
-  result.data.forEach((raw, i) => {
-    const validated = validateRoute(raw, i + 2); // +2 for 1-based + header row
-    if ('error' in validated) {
-      errors.push(validated.error);
-    } else {
-      routes.push(validated.route);
-    }
-  });
-
-  if (routes.length === 0 && errors.length > 0) {
-    throw new Error(`No valid routes found. ${errors[0]}`);
-  }
-
-  if (errors.length > 0) {
-    console.warn(`[importData] ${errors.length} row(s) skipped:\n${errors.join('\n')}`);
-  }
-
-  return routes;
-}
+/** Required fields that must be present and non-empty */
+const REQUIRED_FIELDS = ['busNumber', 'source', 'destination'];
 
 /**
- * Parse an Excel ArrayBuffer into an array of ImportedRoute objects.
+ * Read an Excel ArrayBuffer, parse the first worksheet, and return
+ * validated ImportedRoute objects.
  */
-export function parseExcel(buffer: ArrayBuffer): ImportedRoute[] {
+export function parseExcel(buffer: ArrayBuffer, fileName: string): ImportResult {
   const workbook = XLSX.read(buffer, { type: 'array' });
-  const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-  if (!firstSheet) {
-    throw new Error('Excel file has no sheets.');
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) {
+    throw new Error('The Excel file has no worksheets.');
   }
 
-  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet);
-  const routes: ImportedRoute[] = [];
-  const errors: string[] = [];
+  const sheet = workbook.Sheets[sheetName];
+  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+  if (rawRows.length === 0) {
+    throw new Error('The worksheet is empty. Please add route data before importing.');
+  }
 
-  json.forEach((raw, i) => {
-    const validated = validateRoute(raw, i + 2);
-    if ('error' in validated) {
-      errors.push(validated.error);
-    } else {
-      routes.push(validated.route);
+  // Build internal → column-name mapping by normalising headers from the first row
+  const firstRow = rawRows[0];
+  const headerKeys = Object.keys(firstRow);
+  const fieldToColumn: Record<string, string> = {};
+
+  for (const col of headerKeys) {
+    const normalised = normalizeKey(col);
+    const mapped = COLUMN_MAP[normalised];
+    if (mapped && !fieldToColumn[mapped]) {
+      fieldToColumn[mapped] = col;
     }
-  });
-
-  if (routes.length === 0 && errors.length > 0) {
-    throw new Error(`No valid routes found. ${errors[0]}`);
   }
 
-  if (errors.length > 0) {
-    console.warn(`[importData] ${errors.length} row(s) skipped:\n${errors.join('\n')}`);
-  }
-
-  return routes;
-}
-
-/**
- * Parse a JSON string into an array of ImportedRoute objects.
- */
-export function parseJson(text: string): ImportedRoute[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new Error('Invalid JSON file. Please check the file contents and try again.');
-  }
-
-  let rawArray: Record<string, unknown>[];
-
-  if (Array.isArray(parsed)) {
-    rawArray = parsed as Record<string, unknown>[];
-  } else if (parsed && typeof parsed === 'object') {
-    const obj = parsed as Record<string, unknown>;
-    // Try common wrapping keys
-    const possible = obj.routes ?? obj.data ?? obj.items ?? null;
-    if (Array.isArray(possible)) {
-      rawArray = possible;
-    } else {
-      // If it looks like a single route object, wrap it
-      if (obj.busNumber || obj.BusNumber) {
-        rawArray = [obj];
-      } else {
-        throw new Error('JSON file must contain an array of routes or an object with a "routes" field.');
+  // Verify at least the required fields are mapped
+  for (const field of REQUIRED_FIELDS) {
+    if (!fieldToColumn[field]) {
+      // Try a second pass — search for partial matches if no exact match
+      for (const col of headerKeys) {
+        const norm = normalizeKey(col);
+        if (
+          (field === 'busNumber' && (norm.includes('bus') || norm === 'number')) ||
+          (field === 'source' && (norm.includes('source') || norm.includes('start') || norm.includes('origin'))) ||
+          (field === 'destination' && (norm.includes('dest') || norm.includes('end')))
+        ) {
+          if (!fieldToColumn[field]) fieldToColumn[field] = col;
+        }
       }
     }
-  } else {
-    throw new Error('JSON file must contain an array of route objects.');
+    if (!fieldToColumn[field]) {
+      const columnNames = REQUIRED_FIELDS.map((f) => COLUMN_MAP[Object.keys(COLUMN_MAP).find((k) => COLUMN_MAP[k] === f) ?? f]);
+      throw new Error(
+        `Could not find a "${field}" column in the Excel file. ` +
+        `Expected columns: ${columnNames.join(', ')}. ` +
+        `Found: ${headerKeys.join(', ') || '(none)'}`,
+      );
+    }
   }
 
   const routes: ImportedRoute[] = [];
   const errors: string[] = [];
+  let skipped = 0;
 
-  rawArray.forEach((raw, i) => {
-    const validated = validateRoute(raw, i + 1);
-    if ('error' in validated) {
-      errors.push(validated.error);
+  rawRows.forEach((raw, i) => {
+    const rowNum = i + 2; // 1-based + header
+
+    const getField = (field: string): string => {
+      const col = fieldToColumn[field];
+      if (!col) return '';
+      const val = raw[col];
+      if (val == null) return '';
+      return String(val).trim();
+    };
+
+    const busNumber = getField('busNumber');
+    const routeName = getField('routeName');
+    const source = getField('source');
+    const destination = getField('destination');
+    const distance = getField('distance');
+    const estimatedDuration = getField('estimatedDuration');
+    const stopsRaw = getField('stops');
+
+    // Validate required fields
+    const missing: string[] = [];
+    if (!busNumber) missing.push('Bus Number');
+    if (!source) missing.push('Source');
+    if (!destination) missing.push('Destination');
+
+    if (missing.length > 0) {
+      errors.push(`Row ${rowNum}: missing required field(s): ${missing.join(', ')}. Route skipped.`);
+      skipped++;
+      return;
+    }
+
+    // Parse stops (comma, semicolon, or pipe separated)
+    const stops: string[] = stopsRaw
+      ? stopsRaw
+          .split(/[,;|]/)
+          .map((s: string) => s.trim())
+          .filter(Boolean)
+      : [source, destination]; // fallback when no stops provided
+
+    // Check for duplicate bus number — update in-place
+    const existingIndex = routes.findIndex((r) => r.busNumber.toUpperCase() === busNumber.toUpperCase());
+    const route: ImportedRoute = {
+      busNumber,
+      routeName: routeName || `${source} → ${destination}`,
+      source,
+      destination,
+      stops,
+      distance: distance || '-',
+      estimatedDuration: estimatedDuration || '-',
+    };
+
+    if (existingIndex >= 0) {
+      routes[existingIndex] = route;
+      errors.push(`Row ${rowNum}: bus number "${busNumber}" already exists — route updated.`);
     } else {
-      routes.push(validated.route);
+      routes.push(route);
     }
   });
 
-  if (routes.length === 0 && errors.length > 0) {
-    throw new Error(`No valid routes found. ${errors[0]}`);
-  }
+  return { routes, skipped, errors };
+}
 
-  if (errors.length > 0) {
-    console.warn(`[importData] ${errors.length} row(s) skipped:\n${errors.join('\n')}`);
-  }
+// ---------------------------------------------------------------------------
+// Template generation
+// ---------------------------------------------------------------------------
 
-  return routes;
+const TEMPLATE_ROWS = [
+  {
+    'Bus Number': '21G',
+    'Route Name': 'Broadway to Tambaram',
+    Source: 'Broadway',
+    Destination: 'Tambaram',
+    Stops: 'Broadway, Central, Guindy, Tambaram',
+    Distance: '32 km',
+    'Estimated Duration': '1 hr 15 min',
+  },
+  {
+    'Bus Number': '',
+    'Route Name': '',
+    Source: '',
+    Destination: '',
+    Stops: '',
+    Distance: '',
+    'Estimated Duration': '',
+  },
+];
+
+export function downloadTemplate(): void {
+  const ws = XLSX.utils.json_to_sheet(TEMPLATE_ROWS);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Routes');
+  // Set column widths
+  ws['!cols'] = [
+    { wch: 14 }, // Bus Number
+    { wch: 28 }, // Route Name
+    { wch: 18 }, // Source
+    { wch: 18 }, // Destination
+    { wch: 40 }, // Stops
+    { wch: 12 }, // Distance
+    { wch: 20 }, // Estimated Duration
+  ];
+  XLSX.writeFile(wb, 'MTC_Routes_Template.xlsx');
+}
+
+// ---------------------------------------------------------------------------
+// Export current routes as Excel
+// ---------------------------------------------------------------------------
+
+export function exportRoutesAsExcel(routes: ImportedRoute[]): void {
+  const data = routes.map((r) => ({
+    'Bus Number': r.busNumber,
+    'Route Name': r.routeName,
+    Source: r.source,
+    Destination: r.destination,
+    Stops: r.stops.join(', '),
+    Distance: r.distance,
+    'Estimated Duration': r.estimatedDuration,
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Routes');
+  ws['!cols'] = [
+    { wch: 14 },
+    { wch: 28 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 50 },
+    { wch: 12 },
+    { wch: 20 },
+  ];
+  XLSX.writeFile(wb, `MTC_Routes_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }

@@ -79,19 +79,22 @@ export interface SchemeFilters {
   month: string;
 }
 
-/** A single stop along an imported route */
-export interface ImportedStop {
-  name: string;
-  lat?: number;
-  lng?: number;
-}
-
-/** Schema expected from imported CSV / XLSX / JSON files */
+/** Schema for imported Excel route data */
 export interface ImportedRoute {
   busNumber: string;
+  routeName: string;
   source: string;
   destination: string;
-  stops: (string | ImportedStop)[];
+  stops: string[];
+  distance: string;
+  estimatedDuration: string;
+}
+
+/** Result of parsing an Excel file */
+export interface ImportResult {
+  routes: ImportedRoute[];
+  skipped: number;
+  errors: string[];
 }
 
 /** Metadata tracked for each import operation */

@@ -20,7 +20,7 @@ L.Icon.Default.mergeOptions({
 const CHENNAI_CENTER: [number, number] = [13.0827, 80.2707];
 const ROUTE_COLOR = '#0ea5e9';
 
-/** Convert a string or ImportedStop to a display name. */
+/** Convert a stop to a display name. */
 function stopName(stop: string | { name: string }): string {
   return typeof stop === 'string' ? stop : stop.name;
 }
@@ -29,7 +29,7 @@ function stopName(stop: string | { name: string }): string {
  * A display-oriented route that can come from either mock data or imported data.
  * When coordinates aren't available (imported data), we show a card-only view.
  */
-type DisplayRoute = MockBusRoute | (ImportedRoute & { coordinates: [number, number][]; routeName: string; startPoint: string; endPoint: string });
+type DisplayRoute = MockBusRoute | (ImportedRoute & { coordinates: [number, number][] });
 
 function hasCoords(route: DisplayRoute): route is MockBusRoute {
   return route.coordinates.length > 0;
@@ -49,6 +49,13 @@ function MapController({ route }: { route: DisplayRoute | null }) {
 }
 
 function RouteInfoCard({ route }: { route: DisplayRoute }) {
+  // Determine the display values — imported routes have these fields directly
+  const startPoint = 'source' in route ? route.source : (route as MockBusRoute).startPoint;
+  const endPoint = 'destination' in route ? route.destination : (route as MockBusRoute).endPoint;
+  const routeName = 'routeName' in route ? route.routeName : (route as MockBusRoute).routeName;
+  const distance = 'distance' in route ? route.distance : null;
+  const duration = 'estimatedDuration' in route ? route.estimatedDuration : null;
+
   return (
     <div className="rounded-lg border border-[#1E293B] bg-[#0F172A] p-4 shadow-panel">
       <div className="flex items-center gap-2">
@@ -57,18 +64,18 @@ function RouteInfoCard({ route }: { route: DisplayRoute }) {
         </span>
         <div>
           <div className="text-lg font-bold text-[#E2E8F0]">{route.busNumber}</div>
-          <div className="text-xs text-[#94A3B8]">{route.routeName}</div>
+          <div className="text-xs text-[#94A3B8]">{routeName}</div>
         </div>
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <div>
           <dt className="text-xs uppercase tracking-wide text-[#94A3B8]">Starting Point</dt>
-          <dd className="font-semibold text-[#E2E8F0]">{route.startPoint}</dd>
+          <dd className="font-semibold text-[#E2E8F0]">{startPoint}</dd>
         </div>
         <div>
           <dt className="text-xs uppercase tracking-wide text-[#94A3B8]">Destination</dt>
-          <dd className="font-semibold text-[#E2E8F0]">{route.endPoint}</dd>
+          <dd className="font-semibold text-[#E2E8F0]">{endPoint}</dd>
         </div>
         <div>
           <dt className="text-xs uppercase tracking-wide text-[#94A3B8]">Total Stops</dt>
@@ -78,6 +85,18 @@ function RouteInfoCard({ route }: { route: DisplayRoute }) {
           <dt className="text-xs uppercase tracking-wide text-[#94A3B8]">Bus Number</dt>
           <dd className="font-semibold text-[#E2E8F0]">{route.busNumber}</dd>
         </div>
+        {distance && (
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-[#94A3B8]">Distance</dt>
+            <dd className="font-semibold text-[#E2E8F0]">{distance}</dd>
+          </div>
+        )}
+        {duration && (
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-[#94A3B8]">Est. Duration</dt>
+            <dd className="font-semibold text-[#E2E8F0]">{duration}</dd>
+          </div>
+        )}
       </dl>
 
       <div className="mt-4">
@@ -110,7 +129,7 @@ export default function MapPage() {
     ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
     : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 
-  const { importedRoutes, metadata } = useImportedRoutes();
+  const { importedRoutes } = useImportedRoutes();
 
   const [query, setQuery] = useState('');
   const [selectedRoute, setSelectedRoute] = useState<DisplayRoute | null>(null);
@@ -121,13 +140,11 @@ export default function MapPage() {
   const importedIndex = useMemo(() => {
     const index = new Map<string, DisplayRoute>();
     for (const r of importedRoutes) {
-      index.set(r.busNumber.toUpperCase(), {
+      const display: DisplayRoute = {
         ...r,
-        routeName: `${r.source} → ${r.destination}`,
-        startPoint: r.source,
-        endPoint: r.destination,
         coordinates: [],
-      });
+      };
+      index.set(r.busNumber.toUpperCase(), display);
     }
     return index;
   }, [importedRoutes]);
