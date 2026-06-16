@@ -45,6 +45,7 @@ import {
   schemeTotals,
   topSchemeRoutes,
 } from './utils/schemeAnalytics';
+import { useTheme } from './context/ThemeContext';
 import Sidebar from './components/Sidebar';
 import KPI from './components/KPI';
 import AIInsights from './components/AIInsights';
@@ -211,7 +212,9 @@ function AuthRedirect({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-function LoginPage({ dark, onToggleDark, onLogin }: { dark: boolean; onToggleDark: () => void; onLogin: (email: string, password: string) => Promise<void> }) {
+function LoginPage({ onLogin }: { onLogin: (email: string, password: string) => Promise<void> }) {
+  const { theme, toggleTheme } = useTheme();
+  const dark = theme === 'dark';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -236,11 +239,10 @@ function LoginPage({ dark, onToggleDark, onLogin }: { dark: boolean; onToggleDar
   };
 
   return (
-    <div className={dark ? 'dark' : ''}>
-      <main className="grid min-h-screen place-items-center bg-[#0B1220] px-4 py-8 text-slate-100">
+    <main className="grid min-h-screen place-items-center bg-[#0B1220] px-4 py-8 text-slate-100">
         <button
           aria-label="Toggle theme"
-          onClick={onToggleDark}
+          onClick={toggleTheme}
           className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-md bg-[#0F172A] text-[#E2E8F0] shadow-panel"
         >
           {dark ? <Sun size={18} /> : <Moon size={18} />}
@@ -297,12 +299,11 @@ function LoginPage({ dark, onToggleDark, onLogin }: { dark: boolean; onToggleDar
             </button>
           </form>
         </section>
-      </main>
-    </div>
+    </main>
   );
 }
 
-function DashboardShell({ dark, onToggleDark }: { dark: boolean; onToggleDark: () => void }) {
+function DashboardShell() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [logoutNotice, setLogoutNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -389,7 +390,6 @@ function DashboardShell({ dark, onToggleDark }: { dark: boolean; onToggleDark: (
   };
 
   return (
-    <div className={dark ? 'dark' : ''}>
       <div className="flex">
         <Sidebar />
         <main className="flex-1 min-h-screen bg-[#0B1220] text-[#E2E8F0]">
@@ -593,7 +593,6 @@ function DashboardShell({ dark, onToggleDark }: { dark: boolean; onToggleDark: (
         </div>
       </main>
       </div>
-    </div>
   );
 }
 
@@ -985,7 +984,6 @@ function ReportsPage({ rows }: { rows: RouteAggregate[] }) {
 }
 
 function App() {
-  const [dark, setDark] = useState(true);
   const { login } = useAuth();
 
   return (
@@ -995,7 +993,7 @@ function App() {
           path="/login"
           element={
             <AuthRedirect>
-              <LoginPage dark={dark} onToggleDark={() => setDark((value) => !value)} onLogin={login} />
+              <LoginPage onLogin={login} />
             </AuthRedirect>
           }
         />
@@ -1003,7 +1001,7 @@ function App() {
           path="/dashboard"
           element={
             <ProtectedRoute>
-              <DashboardShell dark={dark} onToggleDark={() => setDark((value) => !value)} />
+              <DashboardShell />
             </ProtectedRoute>
           }
         />
