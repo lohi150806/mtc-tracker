@@ -3,36 +3,83 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
-  background: #0B1220;
-  --bg-dark-navy: #071427;
+  color-scheme: light dark;
   --accent-cyan: #06b6d4;
-  --surface: rgba(255,255,255,0.06);
+  --surface: rgba(255, 255, 255, 0.06);
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.14), transparent 360px),
-    #0B1220;
 }
 
-.dark body {
+/* Light theme (default when .dark is absent) */
+html:not(.dark) body {
+  background:
+    linear-gradient(180deg, rgba(148, 163, 184, 0.12), transparent 360px),
+    #f1f5f9;
+}
+
+/* Dark theme */
+html.dark body {
   background:
     linear-gradient(180deg, rgba(15, 23, 42, 0.14), transparent 360px),
-    #0B1220;
+    #0b1220;
 }
+
+/* Smooth theme transitions (Leaflet panes excluded to keep map interactions crisp) */
+*:not(.leaflet-pane):not(.leaflet-pane *) {
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease,
+    fill 0.3s ease,
+    stroke 0.3s ease;
+}
+
+/*
+ * Light-theme remap layer.
+ * The dashboard was authored with hard-coded dark palette utility classes.
+ * In light mode we remap those surfaces, text and borders to light equivalents
+ * so the whole app (sidebar, navbar, cards, tables, charts, forms, dropdowns,
+ * settings) renders correctly. Accent colors (cyan/green/amber/rose) are kept.
+ */
+html:not(.dark) .bg-\[\#0B1220\] { background-color: #f1f5f9; }
+html:not(.dark) .bg-\[\#0F172A\] { background-color: #ffffff; }
+html:not(.dark) .bg-\[\#111827\] { background-color: #ffffff; }
+html:not(.dark) .bg-\[\#11203b\] { background-color: #e2e8f0; }
+html:not(.dark) .bg-\[\#162133\] { background-color: #eef2f7; }
+html:not(.dark) .bg-\[\#062B4A\] { background-color: #e0f2fe; }
+html:not(.dark) .bg-\[\#062233\] { background-color: #e0f2fe; }
+html:not(.dark) .bg-\[\#1E293B\] { background-color: #e2e8f0; }
+
+html:not(.dark) .hover\:bg-\[\#11203b\]:hover { background-color: #e2e8f0; }
+html:not(.dark) .hover\:bg-\[\#162133\]:hover { background-color: #e2e8f0; }
+
+html:not(.dark) .text-\[\#E2E8F0\] { color: #0f172a; }
+html:not(.dark) .text-\[\#94A3B8\] { color: #475569; }
+html:not(.dark) .text-\[\#64748B\] { color: #475569; }
+html:not(.dark) .text-\[\#38BDF8\] { color: #0369a1; }
+
+html:not(.dark) .border-\[\#1E293B\] { border-color: #e2e8f0; }
+html:not(.dark) .border-\[\#0F172A\] { border-color: #e2e8f0; }
+
+html:not(.dark) .from-\[\#0F172A\] { --tw-gradient-from: #ffffff var(--tw-gradient-from-position); }
+html:not(.dark) .to-\[\#0B1220\] { --tw-gradient-to: #f1f5f9 var(--tw-gradient-to-position); }
 
 /* Active menu glow */
 .active-glow {
-  box-shadow: 0 6px 18px rgba(6,182,212,0.14), 0 0 8px rgba(6,182,212,0.08) inset;
+  box-shadow: 0 6px 18px rgba(6, 182, 212, 0.14), 0 0 8px rgba(6, 182, 212, 0.08) inset;
 }
 
 /* Top nav surface */
 .topnav-surface {
-  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+}
+
+html:not(.dark) .topnav-surface {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.02), rgba(15, 23, 42, 0.01));
 }
 
 button,

@@ -36,6 +36,7 @@ import {
 } from 'firebase/firestore';
 import { auth } from '../firebase';
 import { getFirestore } from 'firebase/firestore';
+import { useTheme } from '../context/ThemeContext';
 
 const db = getFirestore();
 
@@ -76,7 +77,7 @@ function SettingsPage() {
   });
   const [profileEditing, setProfileEditing] = useState(false);
   const [profileForm, setProfileForm] = useState<Partial<UserProfile>>({});
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const { theme: globalTheme, setTheme: setGlobalTheme } = useTheme();
   const [notifications, setNotifications] = useState<NotificationSettings>({
     revenueAlerts: true,
     loadFactorAlerts: true,
@@ -133,7 +134,9 @@ function SettingsPage() {
             const data = userDoc.data();
             if (data.preferences) {
               setPreferences(data.preferences);
-              setTheme(data.preferences.theme);
+              if (data.preferences.theme === 'dark' || data.preferences.theme === 'light') {
+                setGlobalTheme(data.preferences.theme);
+              }
             }
             if (data.notifications) {
               setNotifications(data.notifications);
@@ -314,7 +317,7 @@ function SettingsPage() {
     setPreferences(updated);
 
     if (key === 'theme') {
-      setTheme(value as 'dark' | 'light');
+      setGlobalTheme(value as 'dark' | 'light');
     }
 
     if (!user) return;
@@ -502,7 +505,7 @@ function SettingsPage() {
                         key={themeOption}
                         onClick={() => handlePreferencesChange('theme', themeOption)}
                         className={`flex items-center gap-2 rounded-lg px-4 py-2 transition ${
-                          preferences.theme === themeOption
+                          globalTheme === themeOption
                             ? 'bg-[#0EA5E9] text-[#0B1220]'
                             : 'border border-[#1E293B] bg-[#0F172A] text-[#E2E8F0] hover:bg-[#11203b]'
                         }`}
